@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Game of Life — Chispas</title>
+    <style>
+        /* ensure page uses full viewport and no default margins */
+        html, body { height: 100%; margin: 0; }
+        /* make canvas fill viewport */
+        canvas#game { display: block; width: 100vw; height: 100vh; }
+    </style>
+</head>
+<body>
+    <h1>Game of Life</h1>
+    <canvas id="game" aria-label="Game of Life canvas">
+        Your browser does not support the canvas element.
+    </canvas>
+
+    <script>
+    (function () {
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+
+        // Grid: 40 cols * 25 rows = 1000 cuadros
+        const COLS = 40;
+        const ROWS = 25;
+
+        // Estado de la cuadrícula: 0 = muerta, 1 = viva
+        let grid = new Array(ROWS).fill().map(() => new Array(COLS).fill(0));
+
+        // recalcula tamaño del buffer del canvas para la resolución de pantalla
+        function resizeCanvas() {
+            const dpr = window.devicePixelRatio || 1;
+            const cssWidth = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+            const cssHeight = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+
+            // mantener CSS size
+            canvas.style.width = cssWidth + 'px';
+            canvas.style.height = cssHeight + 'px';
+
+            const displayWidth  = Math.floor(cssWidth * dpr);
+            const displayHeight = Math.floor(cssHeight * dpr);
+
+            if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+                canvas.width = displayWidth;
+                canvas.height = displayHeight;
+                // ajustar transform para dibujar en unidades CSS pixels
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            }
+        }
+
+        // devuelve rect en coordenadas CSS pixels para la celda (col, row)
+        function cellRect(col, row) {
+            const cssWidth = canvas.clientWidth;
+            const cssHeight = canvas.clientHeight;
+            const cellW = cssWidth / COLS;
+            const cellH = cssHeight / ROWS;
+            const x = Math.floor(col * cellW);
+            const y = Math.floor(row * cellH);
+            // ajustar ancho/alto para evitar acumulación de subpíxeles en los bordes
+            const w = Math.ceil((col + 1) * cellW) - Math.floor(col * cellW);
+            const h = Math.ceil((row + 1) * cellH) - Math.floor(row * cellH);
+            return { x, y, w, h };
+        }
+
+        // función para borrar toda la cuadrícula (fondo blanco y sin bordes)
+        function borrarCuadricula() {
+            const cssWidth = canvas.clientWidth;
+            const cssHeight = canvas.clientHeight;
+            ctx.clearRect(0, 0, cssWidth, cssHeight);
+            // opcional: rellenar con color de fondo
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, cssWidth, cssHeight);
+        }
+
+        // función para dibujar un cuadro relleno en (col, row)
+        function dibujarCuadroRelleno(col, row, color = '#000000') {
+            const r = cellRect(col, row);
+            ctx.fillStyle = color;
+            ctx.fillRect(r.x, r.y, r.w, r.h);
+        }
+
+        // función para dibujar un cuadro vacío (fondo + borde) en (col, row)
+        function dibujarCuadroVacio(col, row, bordeColor = '#cccccc', fondo = '#ffffff') {
+            const r = cellRect(col, row);
+            // rellenar fondo
+            ctx.fillStyle = fondo;
+            ctx.fillRect(r.x, r.y, r.w, r.h);
+            // dibujar borde (1px)
+            ctx.strokeStyle = bordeColor;
+            ctx.lineWidth = 1;
+            // para que la línea quede nítida, dibujar el rectángulo ajustando 0.5
+            ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+        }
+
+        // Inicializa grid y dibuja aleatoriamente
+        function aleatorizarCuadricula(fillProbability = 0.5) {
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    grid[row][col] = Math.random() < fillProbability ? 1 : 0;
+                    if (grid[row][col]) {
+                        dibujarCuadroRelleno(col, row);
+                    } else {
+                        dibujarCuadroVacio(col, row);
+                    }
+                }
+            }
+        }
+
+        // Cuenta vecinas vivas de una celda
+        function contarVecinasVivas(row, col) {
+            let count = 0;
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    if (dr === 0 && dc === 0) continue;
+                    const r = row + dr;
+                    const c = col + dc;
+                    if (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
+                        count += grid[r][c];
+                    }
+                }
+            }
+            return count;
+        }
+
+        // Aplica las reglas de Conway y dibuja la nueva generación
+        function evaluarSiguienteGeneracion() {
+            const nuevoGrid = new Array(ROWS).fill().map(() => new Array(COLS).fill(0));
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    const vivas = contarVecinasVivas(row, col);
+                    if (grid[row][col] === 1) {
+                        // Celda viva
+                        if (vivas === 2 || vivas === 3) {
+                            nuevoGrid[row][col] = 1; // Supervivencia
+                        } else {
+                            nuevoGrid[row][col] = 0; // Muerte por soledad o superpoblación
+                        }
+                    } else {
+                        // Celda muerta
+                        if (vivas === 3) {
+                            nuevoGrid[row][col] = 1; // Nacimiento
+                        } else {
+                            nuevoGrid[row][col] = 0;
+                        }
+                    }
+                }
+            }
+            grid = nuevoGrid;
+            // Dibujar nueva generación
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    if (grid[row][col]) {
+                        dibujarCuadroRelleno(col, row);
+                    } else {
+                        dibujarCuadroVacio(col, row);
+                    }
+                }
+            }
+        }
+
+        // Velocidad del bucle en milisegundos
+        const INTERVALO_MS = 100;
+        // Probabilidad inicial de celda viva
+        const PROBABILIDAD_INICIAL = 0.6;
+
+        // exponer las funciones para usarlas desde consola si se desea
+        window.borrarCuadricula = borrarCuadricula;
+        window.dibujarCuadroRelleno = dibujarCuadroRelleno;
+        window.dibujarCuadroVacio = dibujarCuadroVacio;
+        window.aleatorizarCuadricula = aleatorizarCuadricula;
+        window.evaluarSiguienteGeneracion = evaluarSiguienteGeneracion;
+
+        // inicialización
+        function init() {
+            resizeCanvas();
+            borrarCuadricula();
+            aleatorizarCuadricula(PROBABILIDAD_INICIAL);
+        }
+
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            borrarCuadricula();
+            aleatorizarCuadricula(PROBABILIDAD_INICIAL);
+        }, { passive: true });
+
+        init();
+
+        // bucle infinito: cada INTERVALO_MS evalúa la siguiente generación
+        setInterval(() => {
+            evaluarSiguienteGeneracion();
+        }, INTERVALO_MS);
+    })();
+    </script>
+
+</body>
+</html>
