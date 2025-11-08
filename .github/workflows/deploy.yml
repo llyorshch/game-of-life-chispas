@@ -28,4 +28,4 @@ jobs:
           folder: .
           clean: true
           # pasar el token del workflow para autorizar el push
-          access-token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
